@@ -21,6 +21,7 @@ from utils.collect_data import (
     collect_group_preference_data,
     collect_group_preference_data_partial_deterministic_list,
     collect_uneven_group_preference_data_partial_deterministic_list,
+    collect_group_preference_data_partial_noisy_list,
     ret_uniform_policy_group,
 )
 from utils.io_utils import create_log_dir, save_code, save_config
@@ -121,6 +122,9 @@ def parse_args():
     parser.add_argument("--weights", type=str, default="equal")
     parser.add_argument("--val_weights", type=str, default="equal")
     parser.add_argument("--test_weights", type=str, default="equal")
+    parser.add_argument("--flipped_noise", type=lambda x: (str(x).lower() == "true"), default=False)
+    parser.add_argument("--noise_ratio_list", type=float_list, default="[0,0]")
+    parser.add_argument("--val_noise_ratio_list", type=float_list, default="[0,0]")
 
     # MLE args
     parser.add_argument("--mle_num_iters", type=int, default=100)
@@ -242,56 +246,91 @@ def setup_environment(args):
 
 
 def get_data(args, env):
-    weights = return_apt_weights(args.weights, args.group_num)
-    val_weights = return_apt_weights(args.val_weights, args.group_num)
-    test_weights = return_apt_weights(args.test_weights, args.group_num)
+    weights = return_apt_weights(args.weights, args.group_num, normalize=True)
+    val_weights = return_apt_weights(args.val_weights, args.group_num, normalize=True)
+    test_weights = return_apt_weights(args.test_weights, args.group_num, normalize=True)
 
     uniform_policy = ret_uniform_policy_group(args.action_num)
 
-    # Train Data
-    if args.use_uneven_grp:
-        train_data = collect_uneven_group_preference_data_partial_deterministic_list(
-            args.pref_data_num,
-            env,
-            weights,
-            uniform_policy,
-            deterministic_ratio_list=args.deterministic_ratio_list,
-        )
-    else:
-        train_data = collect_group_preference_data_partial_deterministic_list(
-            args.pref_data_num,
-            env,
-            weights,
-            uniform_policy,
-            deterministic_ratio_list=args.deterministic_ratio_list,
+    if args.flipped_noise:
+        print("Using flipped noise model")
+        if args.use_uneven_grp:
+            raise ValueError("Uneven_grp not supported for flipped noise")
+        else:
+            train_data = collect_group_preference_data_partial_noisy_list(
+                args.pref_data_num,
+                env,
+                weights,
+                uniform_policy,
+                noisy_ratio_list=args.noise_ratio_list,
+            )
+
+        # Test Data
+        test_data = collect_group_preference_data(
+            num=args.num_trials_for_eval,
+            env=env,
+            weights=test_weights,
+            policy_func=uniform_policy,
+            deterministic=True,
         )
 
-    # Test Data
-    test_data = collect_group_preference_data(
-        num=args.num_trials_for_eval,
-        env=env,
-        weights=test_weights,
-        policy_func=uniform_policy,
-        deterministic=True,
-    )
-
-    # Val Data
-    if args.use_uneven_grp_val:
-        val_data = collect_uneven_group_preference_data_partial_deterministic_list(
-            args.num_trials_for_eval,
-            env,
-            val_weights,
-            uniform_policy,
-            deterministic_ratio_list=args.val_deterministic_ratio_list,
-        )
+        # Val Data
+        if args.use_uneven_grp_val:
+            raise ValueError("Uneven_grp not supported for flipped noise")
+        else:
+            val_data = collect_group_preference_data_partial_noisy_list(
+                args.num_trials_for_eval,
+                env,
+                val_weights,
+                uniform_policy,
+                noisy_ratio_list=args.val_noise_ratio_list,
+            )
     else:
-        val_data = collect_group_preference_data_partial_deterministic_list(
-            args.num_trials_for_eval,
-            env,
-            val_weights,
-            uniform_policy,
-            deterministic_ratio_list=args.val_deterministic_ratio_list,
+        print("Using determinism model")
+        # Train Data
+        if args.use_uneven_grp:
+            train_data = collect_uneven_group_preference_data_partial_deterministic_list(
+                args.pref_data_num,
+                env,
+                weights,
+                uniform_policy,
+                deterministic_ratio_list=args.deterministic_ratio_list,
+            )
+        else:
+            train_data = collect_group_preference_data_partial_deterministic_list(
+                args.pref_data_num,
+                env,
+                weights,
+                uniform_policy,
+                deterministic_ratio_list=args.deterministic_ratio_list,
+            )
+
+        # Test Data
+        test_data = collect_group_preference_data(
+            num=args.num_trials_for_eval,
+            env=env,
+            weights=test_weights,
+            policy_func=uniform_policy,
+            deterministic=True,
         )
+
+        # Val Data
+        if args.use_uneven_grp_val:
+            val_data = collect_uneven_group_preference_data_partial_deterministic_list(
+                args.num_trials_for_eval,
+                env,
+                val_weights,
+                uniform_policy,
+                deterministic_ratio_list=args.val_deterministic_ratio_list,
+            )
+        else:
+            val_data = collect_group_preference_data_partial_deterministic_list(
+                args.num_trials_for_eval,
+                env,
+                val_weights,
+                uniform_policy,
+                deterministic_ratio_list=args.val_deterministic_ratio_list,
+            )
 
     return train_data, val_data, test_data
 

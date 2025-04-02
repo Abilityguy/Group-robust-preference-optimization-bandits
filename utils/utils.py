@@ -22,7 +22,7 @@ def sigmoid(x: float) -> float:
     return 1.0 / (1.0 + np.exp(-x))
 
 
-def return_apt_weights(weights: str, group_num: int) -> List:
+def return_apt_weights(weights: str, group_num: int, normalize=False) -> List:
     if weights == "equal":
         weights = np.ones(group_num) / group_num
         weights = weights.tolist()
@@ -30,4 +30,9 @@ def return_apt_weights(weights: str, group_num: int) -> List:
         if group_num == 1:
             return [1]
         weights = ast.literal_eval(weights)
+
+    if normalize:
+        weights = np.array(weights, dtype=np.float32)
+        weights = weights / np.sum(weights)
+        weights = weights.tolist()
     return weights

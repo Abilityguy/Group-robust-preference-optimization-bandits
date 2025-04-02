@@ -1,6 +1,7 @@
 import collections
 import math
 from typing import List
+from collections import defaultdict
 
 import matplotlib.pyplot as plt
 import neatplot
@@ -283,6 +284,43 @@ def collect_group_preference_data_partial_deterministic_list(
     return pref_dataset
 
 
+def collect_group_preference_data_partial_noisy_list(
+    num: int, env, weights: List[float], policy_func, noisy_ratio_list: List[float]
+) -> List[GroupTransition]:
+    pref_dataset = []
+    action_num = env.action_num
+    group_num = env.group_num
+    group_counts = np.ceil(np.array(weights) * num).astype(int)
+    group_ids = [i for i, count in enumerate(group_counts) for _ in range(count)]
+    np.random.shuffle(group_ids)
+    group_ids = group_ids[:num]
+    crt_count = np.zeros(group_num)
+
+    for i in range(num):
+        state = env.reset()
+        group_id = group_ids[i]
+        action_prob = policy_func(state, group_id)
+        sampled_actions = np.random.choice(a=action_num, size=2, replace=False, p=action_prob)  # replace=True
+        action_one, action_two = sampled_actions[0], sampled_actions[1]
+        reward_one, reward_two = env.sample(action_one, group_id), env.sample(action_two, group_id)
+        # print(state, reward_one, reward_two, reward_two - reward_one)
+        epsilon = np.random.uniform(0, 1)
+
+        # pref=1 means that the second action is preferred over the first one
+        # pref= 0 if reward_one>reward_two else 1
+        if noisy_ratio_list[group_id] <= epsilon:
+            pref = 0 if reward_one > reward_two else 1
+            crt_count[group_id] += 1
+        else:
+            pref = 1 if reward_one > reward_two else 0 # Flip labels
+
+        group_transition = GroupTransition(state, action_one, action_two, group_id, reward_one, reward_two, pref)
+        pref_dataset.append(group_transition)
+    print(f"WEIGHTS: {weights}, COUNTS: {np.bincount(group_ids)}")
+    print(crt_count / np.bincount(group_ids) * 100, "crt_data")
+    return pref_dataset
+
+
 def collect_uneven_group_preference_data_partial_deterministic_list(
     num: int, env, weights: List[float], policy_func, deterministic_ratio_list: List[float]
 ) -> List[GroupTransition]:
@@ -530,3 +568,31 @@ def pref_to_rl(pref_dataset: List[Transition]):
         rl_dataset.append(state)
 
     return rl_dataset
+
+def get_noise_level(env, dataset: List[GroupTransition], group_num: int) -> List:
+    noise_level = [0 for _ in range(group_num)]
+    group_counts = defaultdict(int)
+
+    for _, transition in enumerate(dataset):
+        state, action_one, action_two, group_id, pref = (
+            transition.state,
+            transition.action_0,
+            transition.action_1,
+            transition.group_id,
+            transition.pref,
+        )
+
+        env.cur_state = state
+        reward_one, reward_two = env.sample(action_one, group_id), env.sample(action_two, group_id)
+
+        expected_pref = 0 if reward_one > reward_two else 1
+
+        if expected_pref != pref:
+            noise_level[group_id] += 1
+
+        group_counts[group_id] += 1
+
+    for grp in range(group_num):
+        noise_level[grp] /= group_counts[grp]
+
+    return noise_level

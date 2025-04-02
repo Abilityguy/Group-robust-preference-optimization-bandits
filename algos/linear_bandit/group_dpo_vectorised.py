@@ -7,7 +7,7 @@ import numpy as np
 import wandb
 
 from envs.group_linear_bandit import GroupLinearBandit
-from utils.collect_data import GroupTransition, collect_preference_data, ret_uniform_policy
+from utils.collect_data import GroupTransition, collect_preference_data, ret_uniform_policy, get_noise_level
 from utils.logger import Logger
 from utils.utils import sigmoid, softmax, softmax_2D
 
@@ -682,6 +682,9 @@ class GroupDirectPolicyOptimizationVectorised:
         env: GroupLinearBandit,
         optimal_reward: List[float],
     ) -> float:
+        self.noise_level = get_noise_level(env=env, dataset=dataset, group_num=self.group_num)
+        wandb.config.update({"noise_level": self.noise_level})
+        
         print("ipo grad type: ", self.ipo_grad_type)
         if self.ipo_grad_type == "Regression":
             """

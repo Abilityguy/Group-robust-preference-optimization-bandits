@@ -8,7 +8,7 @@ import numpy as np
 import wandb
 
 from envs.group_linear_bandit import GroupLinearBandit
-from utils.collect_data import GroupTransition, collect_preference_data, ret_uniform_policy
+from utils.collect_data import GroupTransition, collect_preference_data, ret_uniform_policy, get_noise_level
 from utils.logger import Logger
 from utils.utils import sigmoid, softmax
 
@@ -1279,35 +1279,8 @@ class GroupRobustDirectPolicyOptimizationVectorised:
         env: GroupLinearBandit,
         optimal_reward: List[float],
     ) -> float:        
-        self.noise_level = [0 for _ in range(self.group_num)]
-        group_counts = defaultdict(int)
-
-        print(f"{env.reward_param=}")
-        for idx, transition in enumerate(dataset):
-            state, action_one, action_two, group_id, pref = (
-                transition.state,
-                transition.action_0,
-                transition.action_1,
-                transition.group_id,
-                transition.pref,
-            )
-
-            env.cur_state = state
-            reward_one, reward_two = env.sample(action_one, group_id), env.sample(action_two, group_id)
-
-            expected_pref = 0 if reward_one > reward_two else 1
-
-            if expected_pref != pref:
-                self.noise_level[group_id] += 1
-
-            group_counts[group_id] += 1
-
-        print(f"NOISE LEVEL PRE: {self.noise_level}")
-        for grp in range(self.group_num):
-            self.noise_level[grp] /= group_counts[grp]
-
-        print(f"GROUP COUNTS: {group_counts}")
-        print(f"NOISE LEVEL: {self.noise_level}")
+        self.noise_level = get_noise_level(env=env, dataset=dataset, group_num=self.group_num)
+        wandb.config.update({"noise_level": self.noise_level})
 
         ratio = int(len(dataset) / self.batch_size)
         # Collect unique group IDs using set comprehension

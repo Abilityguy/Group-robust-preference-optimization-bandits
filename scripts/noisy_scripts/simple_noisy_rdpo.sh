@@ -3,7 +3,7 @@
 set -e
 set -x
 
-MAX_PARALLEL=8
+MAX_PARALLEL=32
 
 run_experiment() {
     eval $1
@@ -13,7 +13,8 @@ SCRIPT_DIR="scripts/noisy_scripts"
 CONFIG_DIR="scripts/noisy_scripts/configs"
 
 # Generate commands for each method
-python ${SCRIPT_DIR}/main_runner.py --base_config ${CONFIG_DIR}/simple_noisy_config.yaml --method_configs ${CONFIG_DIR}/dpo_config.yaml ${CONFIG_DIR}/rdpo_config.yaml ${CONFIG_DIR}/rdpo_is_config.yaml ${CONFIG_DIR}/cgd_config.yaml ${CONFIG_DIR}/rdpo_noisy_config.yaml
+python ${SCRIPT_DIR}/main_runner_2.py --base_config ${CONFIG_DIR}/simple_noisy_config_2.yaml --method_configs ${CONFIG_DIR}/rdpo_config.yaml --commands_file commands_rdpo.txt
+# ${CONFIG_DIR}/dpo_config.yaml ${CONFIG_DIR}/rdpo_config.yaml ${CONFIG_DIR}/rdpo_is_config.yaml ${CONFIG_DIR}/cgd_config.yaml ${CONFIG_DIR}/rdpo_noisy_config.yaml
 
 # Function to run a single experiment
 run_experiment() {
@@ -30,7 +31,7 @@ do
         wait -n
         PARALLEL_JOBS=$((PARALLEL_JOBS - 1))
     fi
-done < commands.txt
+done < commands_rdpo.txt
 
 # Wait for any remaining background jobs to finish
 wait
